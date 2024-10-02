@@ -2,6 +2,12 @@
 name = "gumbo-lib"
 version = "0.1.0"
 edition = "2021"
+license = "BSD-3-Clause"
+readme = "README.md"
+repository = "https://github.com/lex148/gumbo_lib"
+description = "Best of the best rust projects all mixed together into a website framework"
+categories = ["web-programming", "development-tools"]
+keywords = ["web", "cli", "server", "generator", "tool"]
 
 [dependencies]
 actix-web = "^4.9"
