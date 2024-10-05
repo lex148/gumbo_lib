@@ -1,3 +1,5 @@
+use actix_web::error::ErrorForbidden;
+use actix_web::http::Method;
 use actix_web::FromRequest;
 use aes_gcm::{
     aead::{Aead, KeyInit, OsRng},
@@ -8,11 +10,13 @@ use rand::RngCore;
 use rand::{distributions::Alphanumeric, Rng};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use yew::html;
+use yew::virtual_dom::vnode::VNode;
 
 /// An Active Users Session
-/// Try to keep this model as lite weight as you can.
-/// If you want to store info about a user You should go make a user table/model
-#[derive(Clone, Serialize, Deserialize, PartialEq)]
+/// If you want to store info about this user You should go make a user table/model
+/// The Sub can be used to uniquely Identity them.
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 pub struct Session {
     // A unique identifier for the given user
     sub: String,
@@ -64,7 +68,6 @@ impl Session {
     }
 
     fn from_encrypted(encrypted_bytes: &[u8]) -> Result<Session, actix_web::Error> {
-        use actix_web::error::ErrorForbidden;
         if encrypted_bytes.len() <= 12 {
             return Err(ErrorForbidden(""));
         }
@@ -76,8 +79,15 @@ impl Session {
         let bytes = cipher
             .decrypt(nonce, contents)
             .or(Err(ErrorForbidden("")))?;
-        let session: Self = bincode::deserialize(&bytes).or(Err(ErrorForbidden("")))?;
+        let session: Session = bincode::deserialize(&bytes).or(Err(ErrorForbidden("")))?;
         Ok(session)
+    }
+
+    /// Add this to the top of your html page.
+    pub fn meta_csrf_token(&self) -> VNode {
+        html! {
+            <meta name="csrf-token" content={ self.csrf_token.clone() } />
+        }
     }
 }
 
@@ -135,7 +145,7 @@ impl FromRequest for Session {
 
 /// loads a session the AuthCookie.
 async fn load_session(req: &HttpRequest) -> std::result::Result<Session, actix_web::Error> {
-    use actix_web::error::ErrorForbidden;
+    log::debug!("load_session");
     let auth_cookie = req.cookie("_session").ok_or(ErrorForbidden(""))?;
     let encrypted_base64 = auth_cookie.value().to_string();
     let encrypted_bytes = BASE64_STANDARD
@@ -143,7 +153,21 @@ async fn load_session(req: &HttpRequest) -> std::result::Result<Session, actix_w
         .or(Err(ErrorForbidden("")))?;
     let session = Session::from_encrypted(&encrypted_bytes).or(Err(ErrorForbidden("")))?;
     if session.exp < now_sec() {
+        log::debug!("load_session::expected");
         return Err(ErrorForbidden(""));
     }
+
+    // For Non-GETs, make sure the csrf_token matches what is expected
+    if req.method() != Method::GET {
+        log::debug!("load_session::verifying csrf-token");
+        let headers = req.headers();
+        let token = headers.get("X-CSRF-Token").ok_or(ErrorForbidden(""))?;
+        let token = token.to_str().or(Err(ErrorForbidden("")))?;
+        if token != session.csrf_token {
+            log::debug!("load_session::token mismatch");
+            return Err(ErrorForbidden(""));
+        }
+    }
+
     Ok(session)
 }
