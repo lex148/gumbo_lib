@@ -18,6 +18,20 @@ where
         .body(html))
 }
 
+/// Render a Yew view to send out in an Actix Response for a Turbo Stream
+pub async fn render_turbo_stream<V, VM, E>(args: VM) -> Result<HttpResponse, E>
+where
+    V: BaseComponent,
+    V: BaseComponent<Properties = VM>,
+    VM: Send + 'static,
+{
+    let renderer = ServerRenderer::<V>::with_props(|| args);
+    let html = renderer.render().await;
+    Ok(HttpResponse::Ok()
+        .content_type("text/vnd.turbo-stream.html")
+        .body(html))
+}
+
 /// Render a Yew view to send out in an Actix Response
 /// Used when a form is not valid
 pub fn redirect<E>(path: impl Into<String>) -> Result<HttpResponse, E> {
