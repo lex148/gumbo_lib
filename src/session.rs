@@ -1,4 +1,4 @@
-use actix_web::error::ErrorForbidden;
+use actix_web::error::ErrorUnauthorized;
 use actix_web::http::Method;
 use actix_web::FromRequest;
 use aes_gcm::{
@@ -69,7 +69,7 @@ impl Session {
 
     fn from_encrypted(encrypted_bytes: &[u8]) -> Result<Session, actix_web::Error> {
         if encrypted_bytes.len() <= 12 {
-            return Err(ErrorForbidden(""));
+            return Err(ErrorUnauthorized(""));
         }
         let (noncebytes, contents) = encrypted_bytes.split_at(12);
         let nonce = Nonce::from_slice(noncebytes);
@@ -78,8 +78,8 @@ impl Session {
         let cipher = Aes256Gcm::new(key);
         let bytes = cipher
             .decrypt(nonce, contents)
-            .or(Err(ErrorForbidden("")))?;
-        let session: Session = bincode::deserialize(&bytes).or(Err(ErrorForbidden("")))?;
+            .or(Err(ErrorUnauthorized("")))?;
+        let session: Session = bincode::deserialize(&bytes).or(Err(ErrorUnauthorized("")))?;
         Ok(session)
     }
 
@@ -146,26 +146,26 @@ impl FromRequest for Session {
 /// loads a session the AuthCookie.
 async fn load_session(req: &HttpRequest) -> std::result::Result<Session, actix_web::Error> {
     log::debug!("load_session");
-    let auth_cookie = req.cookie("_session").ok_or(ErrorForbidden(""))?;
+    let auth_cookie = req.cookie("_session").ok_or(ErrorUnauthorized(""))?;
     let encrypted_base64 = auth_cookie.value().to_string();
     let encrypted_bytes = BASE64_STANDARD
         .decode(&encrypted_base64)
-        .or(Err(ErrorForbidden("")))?;
-    let session = Session::from_encrypted(&encrypted_bytes).or(Err(ErrorForbidden("")))?;
+        .or(Err(ErrorUnauthorized("")))?;
+    let session = Session::from_encrypted(&encrypted_bytes).or(Err(ErrorUnauthorized("")))?;
     if session.exp < now_sec() {
         log::debug!("load_session::expected");
-        return Err(ErrorForbidden(""));
+        return Err(ErrorUnauthorized(""));
     }
 
     // For Non-GETs, make sure the csrf_token matches what is expected
     if req.method() != Method::GET {
         log::debug!("load_session::verifying csrf-token");
         let headers = req.headers();
-        let token = headers.get("X-CSRF-Token").ok_or(ErrorForbidden(""))?;
-        let token = token.to_str().or(Err(ErrorForbidden("")))?;
+        let token = headers.get("X-CSRF-Token").ok_or(ErrorUnauthorized(""))?;
+        let token = token.to_str().or(Err(ErrorUnauthorized("")))?;
         if token != session.csrf_token {
             log::debug!("load_session::token mismatch");
-            return Err(ErrorForbidden(""));
+            return Err(ErrorUnauthorized(""));
         }
     }
 
