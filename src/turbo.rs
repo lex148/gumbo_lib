@@ -13,7 +13,7 @@ pub struct TurboMessage {
 
 /// A wrapper around tokio::sync::broadcast
 /// It is used to Send out Render Events to anyone who wants them
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TurboStream(Sender<Arc<TurboMessage>>);
 
 impl Default for TurboStream {

@@ -26,6 +26,14 @@ pub struct Session {
     csrf_token: String,
 }
 
+/// An Active Users Session that does NOT verify a csrf-token
+pub struct SessionUnsafe(Session);
+impl SessionUnsafe {
+    pub fn into_inner(self) -> Session {
+        self.0
+    }
+}
+
 impl Session {
     pub fn sub(&self) -> &str {
         &self.sub
@@ -136,7 +144,6 @@ use futures::future::LocalBoxFuture;
 impl FromRequest for Session {
     type Error = actix_web::Error;
     type Future = LocalBoxFuture<'static, std::result::Result<Self, Self::Error>>;
-
     fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
         let req_clone = req.clone();
         Box::pin(async move { load_session(&req_clone).await })
@@ -170,4 +177,33 @@ async fn load_session(req: &HttpRequest) -> std::result::Result<Session, actix_w
     }
 
     Ok(session)
+}
+
+/// Allows you to request a Session from an actix resource
+impl FromRequest for SessionUnsafe {
+    type Error = actix_web::Error;
+    type Future = LocalBoxFuture<'static, std::result::Result<Self, Self::Error>>;
+    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
+        let req_clone = req.clone();
+        Box::pin(async move { load_session_unsafe(&req_clone).await })
+    }
+}
+
+/// loads a session the AuthCookie.
+async fn load_session_unsafe(
+    req: &HttpRequest,
+) -> std::result::Result<SessionUnsafe, actix_web::Error> {
+    log::debug!("load_session");
+    let auth_cookie = req.cookie("_session").ok_or(ErrorUnauthorized(""))?;
+    let encrypted_base64 = auth_cookie.value().to_string();
+    let encrypted_bytes = BASE64_STANDARD
+        .decode(&encrypted_base64)
+        .or(Err(ErrorUnauthorized("")))?;
+    let session = Session::from_encrypted(&encrypted_bytes).or(Err(ErrorUnauthorized("")))?;
+    if session.exp < now_sec() {
+        log::debug!("load_session::expected");
+        return Err(ErrorUnauthorized(""));
+    }
+    // NOTE: not verifying the csrf_token
+    Ok(SessionUnsafe(session))
 }
