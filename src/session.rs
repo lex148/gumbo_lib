@@ -2,12 +2,12 @@ use actix_web::error::ErrorUnauthorized;
 use actix_web::http::Method;
 use actix_web::FromRequest;
 use aes_gcm::{
-    aead::{Aead, KeyInit, OsRng},
+    aead::{Aead, AeadCore, KeyInit, OsRng},
     Aes256Gcm, Key, Nonce,
 };
 use base64::prelude::*;
-use rand::RngCore;
-use rand::{distributions::Alphanumeric, Rng};
+use rand::distr::Alphanumeric;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use yew::html;
@@ -41,7 +41,7 @@ impl Session {
 
     /// This is called when a user is logged in
     pub fn build(sub: impl Into<String>) -> Session {
-        let csrf_token: String = rand::thread_rng()
+        let csrf_token: String = rand::rng()
             .sample_iter(&Alphanumeric)
             .take(32)
             .map(char::from)
@@ -58,20 +58,25 @@ impl Session {
         let key = Key::<Aes256Gcm>::from_slice(&key_bytes);
         let cipher = Aes256Gcm::new(key);
         // Generate a random nonce
-        let mut noncebytes = [0u8; 12];
-        OsRng.fill_bytes(&mut noncebytes);
-        let nonce = Nonce::from_slice(&noncebytes);
+
+        let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+        let noncebytes: &[u8] = nonce.as_slice();
+
         // generate an encrypt string of this struct
-        let serialized = bincode::serialize(self).expect("Serialization failed");
+        let cfg = bincode::config::standard();
+        let serialized =
+            bincode::serde::encode_to_vec(self, cfg).expect("Session Serialization Failed");
+
         let cipherbytes: Vec<u8> = cipher
-            .encrypt(nonce, serialized.as_ref())
+            .encrypt(&nonce, serialized.as_ref())
             .expect("Serialization failed");
+
         let allbytes: Vec<u8> = noncebytes
-            .as_slice()
             .iter()
             .chain(cipherbytes.iter())
             .cloned()
             .collect();
+
         BASE64_STANDARD.encode(&allbytes)
     }
 
@@ -87,7 +92,11 @@ impl Session {
         let bytes = cipher
             .decrypt(nonce, contents)
             .or(Err(ErrorUnauthorized("")))?;
-        let session: Session = bincode::deserialize(&bytes).or(Err(ErrorUnauthorized("")))?;
+
+        let cfg = bincode::config::standard();
+        let (session, _): (Session, _) =
+            bincode::serde::decode_from_slice(&bytes, cfg).or(Err(ErrorUnauthorized("")))?;
+
         Ok(session)
     }
 

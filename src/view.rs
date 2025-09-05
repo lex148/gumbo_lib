@@ -2,6 +2,16 @@ use actix_web::HttpResponse;
 use yew::html::BaseComponent;
 use yew::ServerRenderer;
 
+/// Returns the web facing path to a resource in your application
+pub fn app_path(src: impl Into<String>) -> String {
+    let src: String = src.into();
+    if let Some(tail) = src.strip_prefix("/") {
+        let root = crate::app_root();
+        return format!("{root}{tail}");
+    }
+    src
+}
+
 /// Render a Yew view to send out in an Actix Response
 pub async fn render<V, VM, E>(args: VM) -> Result<HttpResponse, E>
 where
@@ -35,7 +45,7 @@ where
 /// Render a Yew view to send out in an Actix Response
 /// Used when a form is not valid
 pub fn redirect<E>(path: impl Into<String>) -> Result<HttpResponse, E> {
-    let path: String = path.into();
+    let path: String = app_path(path);
     Ok(HttpResponse::SeeOther()
         .insert_header(("Location", path))
         .finish())

@@ -50,10 +50,7 @@ impl JsFile {
 
     pub fn verify_hash(&self, hash: &str) -> Result<&Self> {
         if !self.hash.starts_with(hash) || hash.is_empty() {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "File Hash Invalid",
-            ))?;
+            Err(std::io::Error::other("File Hash Invalid"))?;
         }
         Ok(self)
     }
@@ -72,7 +69,26 @@ fn is_within_directory(dir: &Path, filename: &Path) -> bool {
 /// This URL contains the JS file's hashed,
 /// so when JS files change, new versions are served up
 pub fn js_path(filename: &str) -> Result<String> {
+    js_path_absolute(filename)
+}
+
+/// Returns the URL to the request javascript file.
+/// Path is relative
+/// This URL contains the JS file's hashed,
+/// so when JS files change, new versions are served up
+pub fn js_path_relative(filename: &str) -> Result<String> {
     let file = JsFile::new(filename)?;
     let hash = &file.hash[0..10];
-    Ok(format!("/assets/js/{filename}-{hash}.js"))
+    Ok(format!("assets/js/{filename}-{hash}.js"))
+}
+
+/// Returns the URL to the request javascript file.
+/// Path is absolute
+/// This URL contains the JS file's hashed,
+/// so when JS files change, new versions are served up
+pub fn js_path_absolute(filename: &str) -> Result<String> {
+    let root = super::app_root();
+    let file = JsFile::new(filename)?;
+    let hash = &file.hash[0..10];
+    Ok(format!("{root}assets/js/{filename}-{hash}.js"))
 }
