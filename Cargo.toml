@@ -10,15 +10,15 @@ categories = ["web-programming", "development-tools"]
 keywords = ["web", "cli", "server", "generator", "tool"]
 
 [dependencies]
-actix-web = "^4.9"
+actix-web = "^4"
 log = "0.4"
 sha3 = "0.10"
 base16ct = {version="0.3", features=["alloc"]}
 minifier = "0.3"
 thiserror = "^2.0"
 anyhow = "^1.0"
-yew = { version = "^0.21", features = ["ssr"] }
-tokio = { version = "^1.40", features = ["sync"], optional=true }
+yew = { version = "^0.22", features = ["ssr"] }
+tokio = { version = "^1", features = ["sync"], optional=true }
 
 # for session
 aes-gcm = { version="^0.10", optional=true }
