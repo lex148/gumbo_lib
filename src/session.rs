@@ -8,7 +8,7 @@ use aes_gcm::{
 use base64::prelude::*;
 use rand::distr::Alphanumeric;
 use rand::Rng;
-use serde::{Deserialize, Serialize};
+use rkyv::{deserialize, Archive, Deserialize, Serialize};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use yew::html;
 use yew::virtual_dom::vnode::VNode;
@@ -16,7 +16,15 @@ use yew::virtual_dom::vnode::VNode;
 /// An Active Users Session
 /// If you want to store info about this user You should go make a user table/model
 /// The Sub can be used to uniquely Identity them.
-#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+
+#[derive(Archive, Deserialize, Serialize, Debug, PartialEq)]
+#[rkyv(
+    // This will generate a PartialEq impl between our unarchived
+    // and archived types
+    compare(PartialEq),
+    // Derives can be passed through to the generated type:
+    derive(Debug),
+)]
 pub struct Session {
     // A unique identifier for the given user
     sub: String,
@@ -63,9 +71,8 @@ impl Session {
         let noncebytes: &[u8] = nonce.as_slice();
 
         // generate an encrypt string of this struct
-        let cfg = bincode::config::standard();
         let serialized =
-            bincode::serde::encode_to_vec(self, cfg).expect("Session Serialization Failed");
+            rkyv::to_bytes::<rkyv::rancor::Error>(self).expect("Session Serialization Failed");
 
         let cipherbytes: Vec<u8> = cipher
             .encrypt(&nonce, serialized.as_ref())
@@ -89,13 +96,16 @@ impl Session {
         let key_bytes = auth_key();
         let key = Key::<Aes256Gcm>::from_slice(&key_bytes);
         let cipher = Aes256Gcm::new(key);
+
         let bytes = cipher
             .decrypt(nonce, contents)
             .or(Err(ErrorUnauthorized("")))?;
 
-        let cfg = bincode::config::standard();
-        let (session, _): (Session, _) =
-            bincode::serde::decode_from_slice(&bytes, cfg).or(Err(ErrorUnauthorized("")))?;
+        let archived = rkyv::access::<ArchivedSession, rkyv::rancor::Error>(&bytes)
+            .or(Err(ErrorUnauthorized("")))?;
+
+        let session =
+            deserialize::<Session, rkyv::rancor::Error>(archived).or(Err(ErrorUnauthorized("")))?;
 
         Ok(session)
     }
